@@ -150,6 +150,8 @@ internal sealed class BreakdownWindow : Window
             return;
         }
 
+        var hovered = Hit(snap, centre, radius, total);
+
         var angle = -MathF.PI / 2f;
 
         foreach (var r in snap.Rows)
@@ -158,16 +160,35 @@ internal sealed class BreakdownWindow : Window
 
             var sweep = (float)(r.Damage / total) * MathF.PI * 2f;
             var colour = JobColours.For(r.Job, r.Name);
-            var lit = r.Name == highlight;
+            var picked = r.Name == highlight;
+            var under = r.Name == hovered;
 
-            var nudge = lit ? new Vector2(MathF.Cos(angle + (sweep / 2f)), MathF.Sin(angle + (sweep / 2f))) * 6f
-                            : Vector2.Zero;
+            var out_ = picked ? 6f : under ? 3f : 0f;
+            var nudge = out_ > 0
+                ? new Vector2(MathF.Cos(angle + (sweep / 2f)), MathF.Sin(angle + (sweep / 2f))) * out_
+                : Vector2.Zero;
 
             dl.PathLineTo(centre + nudge);
             dl.PathArcTo(centre + nudge, radius, angle, angle + sweep, 48);
-            dl.PathFillConvex(ImGui.GetColorU32(lit ? colour : colour with { W = 0.55f }));
+            dl.PathFillConvex(ImGui.GetColorU32(picked || under ? colour : colour with { W = 0.55f }));
 
             angle += sweep;
+        }
+
+        if (hovered is { Length: > 0 })
+        {
+            var row = snap.Rows.Find(r => r.Name == hovered);
+
+            if (row is not null)
+            {
+                ImGui.BeginTooltip();
+                ImGui.TextUnformatted($"{row.Name}   {row.Job}");
+                ImGui.TextDisabled($"{Format.Short(row.Damage)}   {row.Damage / total * 100:N1}% of the pull");
+                ImGui.TextDisabled("click to select");
+                ImGui.EndTooltip();
+
+                if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) this.who = hovered;
+            }
         }
 
         ImGui.SetCursorScreenPos(origin + new Vector2((radius * 2f) + 24f, 0));
@@ -179,7 +200,10 @@ internal sealed class BreakdownWindow : Window
                 if (r.Damage <= 0) continue;
 
                 ImGui.PushStyleColor(ImGuiCol.Text, JobColours.For(r.Job, r.Name));
-                ImGui.TextUnformatted($"{r.Damage / total * 100:N1}%   {r.Name}");
+
+                if (ImGui.Selectable($"{r.Damage / total * 100:N1}%   {r.Name}", r.Name == highlight))
+                    this.who = r.Name;
+
                 ImGui.PopStyleColor();
             }
 
@@ -187,5 +211,30 @@ internal sealed class BreakdownWindow : Window
         }
 
         ImGui.SetCursorScreenPos(origin + new Vector2(0, (radius * 2f) + 12f));
+    }
+
+    private static string? Hit(Snapshot snap, Vector2 centre, float radius, double total)
+    {
+        if (!ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) return null;
+
+        var d = ImGui.GetMousePos() - centre;
+        if (d.LengthSquared() > radius * radius) return null;
+
+        var a = MathF.Atan2(d.Y, d.X) + (MathF.PI / 2f);
+        if (a < 0) a += MathF.PI * 2f;
+
+        var angle = 0f;
+
+        foreach (var r in snap.Rows)
+        {
+            if (r.Damage <= 0) continue;
+
+            var sweep = (float)(r.Damage / total) * MathF.PI * 2f;
+            if (a >= angle && a < angle + sweep) return r.Name;
+
+            angle += sweep;
+        }
+
+        return null;
     }
 }

@@ -83,6 +83,8 @@ internal sealed class MeterWindow : Window
 
     private const float CaptionGap = 10f;
 
+    private const float CaptionScale = 0.85f;
+
     private const int ScrollSpeed = 2;
 
     private const float DeathScale = 1.4f;
@@ -684,8 +686,6 @@ internal sealed class MeterWindow : Window
         dl.AddLine(new Vector2(origin.X, ruleY), new Vector2(origin.X + avail, ruleY),
                    ImGui.GetColorU32(Edge));
 
-        Shadow(textAt with { X = textAt.X + TextInset }, ImGui.GetColorU32(ImGuiCol.Text), left);
-
         var cog = lineHeight * IconScale;
 
         var cogAt = new Vector2(origin.X + avail - cog - TextInset,
@@ -693,9 +693,13 @@ internal sealed class MeterWindow : Window
 
         var textWidth = avail - (cog * 5f) - 16f - (TextInset * 2f) - CaptionGap;
 
-        var rightWidth = ImGui.CalcTextSize(right).X;
+        var rightWidth = ImGui.CalcTextSize(right).X * CaptionScale;
+
         Shadow(textAt with { X = origin.X + TextInset + textWidth - rightWidth },
-               ImGui.GetColorU32(Dim), right);
+               ImGui.GetColorU32(Dim), right, CaptionScale);
+
+        Shadow(textAt with { X = textAt.X + TextInset }, ImGui.GetColorU32(ImGuiCol.Text),
+               Fit(left, textWidth - rightWidth - CaptionGap));
 
         if (IconButton("##cog", cogAt, cog, FontAwesomeIcon.Cog, "Options", Dim with { W = 0.55f }))
         {
@@ -1043,6 +1047,42 @@ internal sealed class MeterWindow : Window
             ImGui.TextUnformatted($"Biggest   {row.MaxHit}");
 
         ImGui.EndTooltip();
+    }
+
+    private static void Shadow(Vector2 pos, uint colour, string text, float scale)
+    {
+        var dl = ImGui.GetWindowDrawList();
+        var font = ImGui.GetFont();
+        var size = ImGui.GetFontSize() * scale;
+        var line = ImGui.GetTextLineHeight();
+        var at = pos with { Y = pos.Y + ((line - (line * scale)) * 0.5f) };
+
+        dl.AddText(font, size, at + new Vector2(1, 1),
+                   ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.65f)), text);
+
+        dl.AddText(font, size, at, colour, text);
+    }
+
+    private static string Fit(string text, float maxWidth)
+    {
+        if (maxWidth <= 0) return string.Empty;
+        if (ImGui.CalcTextSize(text).X <= maxWidth) return text;
+
+        const string tail = "...";
+        var room = maxWidth - ImGui.CalcTextSize(tail).X;
+        if (room <= 0) return string.Empty;
+
+        int lo = 0, hi = text.Length;
+
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+
+            if (ImGui.CalcTextSize(text[..mid]).X <= room) lo = mid;
+            else hi = mid - 1;
+        }
+
+        return lo == 0 ? string.Empty : text[..lo].TrimEnd() + tail;
     }
 
     private static void Shadow(Vector2 pos, uint colour, string text)
