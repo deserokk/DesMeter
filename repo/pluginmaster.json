@@ -1,0 +1,25 @@
+[
+  {
+    "Author": "deserokk",
+    "Name": "DesMeter",
+    "InternalName": "DesMeter",
+    "AssemblyVersion": "0.1.0.0",
+    "TestingAssemblyVersion": "0.1.0.0",
+    "Description": "A combat meter that runs inside the game. Reads the parse from IINACT over plugin IPC and draws it here, so there is no ACT process, no browser and no overlay host to keep alive.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/deserokk/DesMeter",
+    "Tags": [
+      "meter",
+      "dps",
+      "combat",
+      "parser",
+      "iinact"
+    ],
+    "DalamudApiLevel": 15,
+    "Punchline": "Damage, drawn in game",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/deserokk/DesMeter/main/repo/DesMeter/latest.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/deserokk/DesMeter/main/repo/DesMeter/latest.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/deserokk/DesMeter/testing/repo/DesMeter/latest.zip",
+    "DownloadCount": 0
+  }
+]
