@@ -114,9 +114,120 @@ internal sealed class History
     {
         lock (this.gate)
         {
+            if (this.Pvp)
+            {
+                this.ObservePvp(next);
+                return;
+            }
+
             if (this.live is { } previous && Ended(previous, next)) this.Archive(previous);
             this.live = next;
         }
+    }
+
+    internal volatile bool Pvp;
+
+    private void ObservePvp(Snapshot next)
+    {
+
+        if (next.DurationSeconds < this.pvpLastSeconds / 2)
+            foreach (var t in this.pvpTally.Values) t.Reset();
+
+        this.pvpLastSeconds = next.DurationSeconds;
+        this.pvpStarted ??= next.StartedAt;
+
+        foreach (var row in next.Rows)
+        {
+            if (!this.pvpTally.TryGetValue(row.Name, out var tally))
+                this.pvpTally[row.Name] = tally = new Tally();
+
+            tally.Take(row);
+        }
+
+        this.live = this.StickySnapshot(next);
+    }
+
+    private readonly Dictionary<string, Tally> pvpTally = new(StringComparer.Ordinal);
+    private int pvpLastSeconds;
+    private DateTime? pvpStarted;
+
+    private sealed class Tally
+    {
+        internal MeterRow Latest = null!;
+        internal double Damage, Healed, Taken, HealsTaken;
+        internal int Deaths;
+
+        private double lastDamage, lastHealed, lastTaken, lastHealsTaken;
+        private int lastDeaths;
+
+        internal void Take(MeterRow row)
+        {
+            this.Latest = row;
+
+            this.Damage += Gain(ref this.lastDamage, row.Damage);
+            this.Healed += Gain(ref this.lastHealed, row.Healed);
+            this.Taken += Gain(ref this.lastTaken, row.DamageTaken);
+            this.HealsTaken += Gain(ref this.lastHealsTaken, row.HealsTaken);
+
+            var d = (double)this.lastDeaths;
+            this.Deaths += (int)Gain(ref d, row.Deaths);
+            this.lastDeaths = (int)d;
+        }
+
+        private static double Gain(ref double last, double now)
+        {
+            var gain = now > last ? now - last : 0;
+            last = now;
+            return gain;
+        }
+
+        internal void Reset()
+        {
+            this.lastDamage = this.lastHealed = this.lastTaken = this.lastHealsTaken = 0;
+            this.lastDeaths = 0;
+        }
+    }
+
+    private Snapshot StickySnapshot(Snapshot next)
+    {
+        var seconds = Math.Max(1, (int)(next.CapturedAt - (this.pvpStarted ?? next.StartedAt)).TotalSeconds);
+        var tallies = this.pvpTally.Values.ToList();
+
+        var damage = tallies.Sum(t => t.Damage);
+        var healed = tallies.Sum(t => t.Healed);
+
+        var rows = tallies.Select(t => t.Latest with
+        {
+            Damage = t.Damage,
+            Healed = t.Healed,
+            Deaths = t.Deaths,
+            DamageTaken = t.Taken,
+            HealsTaken = t.HealsTaken,
+            Dps = t.Damage / seconds,
+            Hps = t.Healed / seconds,
+            DamagePct = damage > 0 ? t.Damage / damage * 100 : 0,
+            HealedPct = healed > 0 ? t.Healed / healed * 100 : 0,
+        }).ToList();
+
+        var span = TimeSpan.FromSeconds(seconds);
+
+        return new Snapshot
+        {
+            Title = next.Title,
+            Zone = next.Zone,
+            Duration = $"{(int)span.TotalMinutes:00}:{span.Seconds:00}",
+            DurationSeconds = seconds,
+            CapturedAt = next.CapturedAt,
+            StartedAt = this.pvpStarted ?? next.StartedAt,
+            LogFile = next.LogFile,
+            LogOffset = next.LogOffset,
+            TotalDamage = damage,
+            RaidDps = damage / seconds,
+            RaidHps = healed / seconds,
+            MaxDamage = rows.Count > 0 ? rows.Max(r => r.Damage) : 0,
+            MaxHealed = rows.Count > 0 ? rows.Max(r => r.Healed) : 0,
+            Rows = rows,
+        };
     }
 
     private static bool Ended(Snapshot previous, Snapshot next)
@@ -169,6 +280,10 @@ internal sealed class History
             if (this.live is { } last) this.Archive(last);
             this.live = null;
             this.overallFrom = this.segments.Count;
+
+            this.pvpTally.Clear();
+            this.pvpLastSeconds = 0;
+            this.pvpStarted = null;
         }
     }
 
