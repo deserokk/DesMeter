@@ -1144,14 +1144,30 @@ internal sealed class MeterWindow : Window
         var text = ImGui.GetColorU32(ImGuiCol.Text);
         var y = at.Y + barTop + (pad * 0.8f);
 
+        var lb = this.shown?.Rows.Find(r => IsLimitBreak(r.Name));
+        var counts = this.Settings.CountLimitBreak && lb is not null;
+
+        var lbDamage = counts ? lb!.Damage : 0d;
+        var lbHealing = counts ? lb!.Healed : 0d;
+
+        double totalDamage = 0, totalHealed = 0;
+
+        foreach (var r in this.view) { totalDamage += r.Row.Damage; totalHealed += r.Row.Healed; }
+
+        totalDamage += lbDamage;
+        totalHealed += lbHealing;
+
+        var damageShare = totalDamage > 0 ? row.Damage / totalDamage * 100 : 0;
+        var healShare = totalHealed > 0 ? row.Healed / totalHealed * 100 : 0;
+
         Shadow(new Vector2(at.X + pad, y), dim, "Damage");
         Right(at.X + pad + barW, y, $"{Format.Short(row.Damage)}   {Format.Short(row.Dps)} dps", text);
 
         var dmgAt = new Vector2(at.X + pad, y + line + 3f);
         Rail(dl, dmgAt, barW, barH);
-        this.Shares(dl, dmgAt, barW, barH, row, r => r.DamagePct, 100f);
+        this.Shares(dl, dmgAt, barW, barW, barH, row, r => r.Damage, totalDamage, lbDamage);
 
-        Centred(at.X + pad, dmgAt.Y + barH + 2f, barW, $"{row.DamagePct:N1}% of damage done", dim);
+        Centred(at.X + pad, dmgAt.Y + barH + 2f, barW, $"{damageShare:N1}% of damage done", dim);
 
         y += block;
 
@@ -1161,20 +1177,22 @@ internal sealed class MeterWindow : Window
         var healAt = new Vector2(at.X + pad, y + line + 3f);
         Rail(dl, healAt, barW, barH);
 
-        var share = Frac(row.HealedPct) * 100f;
+        var share = (float)healShare;
         var wasted = MathF.Min(Frac(row.OverHealPct), 0.99f);
         var waste = share * wasted / (1f - wasted);
         var axis = 100f + waste;
 
         var over = barW * waste / axis;
 
-        this.Shares(dl, healAt, barW, barH, row, r => r.HealedPct, axis);
+        this.Shares(dl, healAt, barW * 100f / axis, barW, barH, row, r => r.Healed, totalHealed, lbHealing);
 
         if (over > 0.5f)
         {
             var line0 = healAt.X + barW - over;
 
-            Lit(dl, healAt with { X = line0 }, over, barH, new Vector4(0.62f, 0.66f, 0.74f, 0.55f));
+            var wastedColour = new Vector4(colour.X * 0.42f, colour.Y * 0.42f, colour.Z * 0.42f, 1f);
+
+            Lit(dl, healAt with { X = line0 }, over, barH, wastedColour);
 
             dl.AddLine(new Vector2(line0, healAt.Y - 1f), new Vector2(line0, healAt.Y + barH + 1f),
                        ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.85f)));
@@ -1183,8 +1201,8 @@ internal sealed class MeterWindow : Window
         var healSays = row.Healed <= 0
             ? "no healing done"
             : row.OverHealPct >= 1
-                ? $"{row.HealedPct:N1}% of healing done  ·  {row.OverHealPct:N0}% overheal"
-                : $"{row.HealedPct:N1}% of healing done";
+                ? $"{healShare:N1}% of healing done  ·  {row.OverHealPct:N0}% overheal"
+                : $"{healShare:N1}% of healing done";
 
         Centred(at.X + pad, healAt.Y + barH + 2f, barW, healSays, dim);
 
@@ -1226,16 +1244,18 @@ internal sealed class MeterWindow : Window
         ImGui.PopStyleColor();
     }
 
-    private void Shares(ImDrawListPtr dl, Vector2 at, float width, float height,
-                        MeterRow self, Func<MeterRow, double> share, float axis)
+    private void Shares(ImDrawListPtr dl, Vector2 at, float region, float barWidth, float height,
+                        MeterRow self, Func<MeterRow, double> value, double total, double limitBreak)
     {
+        if (total <= 0) return;
+
         var x = at.X;
         var last = this.view.Count - 1;
 
         for (var i = 0; i <= last; i++)
         {
             var r = this.view[i].Row;
-            var w = width * (float)Math.Clamp(share(r), 0, axis) / axis;
+            var w = region * (float)(Math.Max(0, value(r)) / total);
 
             if (w < 0.4f) continue;
 
@@ -1254,6 +1274,20 @@ internal sealed class MeterWindow : Window
 
             x += w;
         }
+
+        if (limitBreak <= 0) return;
+
+        var lbW = region * (float)(limitBreak / total);
+        var lbX = at.X + region - lbW;
+
+        var corners = region < barWidth - 0.5f ? ImDrawFlags.RoundCornersNone : ImDrawFlags.RoundCornersRight;
+
+        dl.AddRectFilled(new Vector2(lbX, at.Y), new Vector2(lbX + lbW, at.Y + height),
+                         ImGui.GetColorU32(new Vector4(0.42f, 0.78f, 0.82f, 0.55f)),
+                         height * 0.5f, corners);
+
+        dl.AddLine(new Vector2(lbX, at.Y - 1f), new Vector2(lbX, at.Y + height + 1f),
+                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.85f)));
     }
 
     private static float Frac(double percent) => Math.Clamp((float)percent / 100f, 0f, 1f);
