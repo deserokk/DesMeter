@@ -216,6 +216,13 @@ internal sealed class OptionsWindow : Window
             this.config.Save();
         }
 
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Show or hide every meter");
+
+        if (KeyPicker.Draw(this.config)) this.config.Save();
+
+        ImGui.Spacing();
+
         var lockAlt = this.config.LockNeedsAlt;
         if (ImGui.Checkbox("Only show the lock button with Alt held", ref lockAlt))
         {

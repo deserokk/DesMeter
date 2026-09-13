@@ -1,4 +1,5 @@
 ﻿using System;
+using Dalamud.Game.ClientState.Keys;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Configuration;
@@ -11,6 +12,14 @@ internal sealed class Configuration : IPluginConfiguration
     public int Version { get; set; } = 1;
 
     public List<MeterSettings> Windows { get; set; } = new();
+
+    public VirtualKey ToggleKey { get; set; } = VirtualKey.NO_KEY;
+
+    public bool ToggleCtrl { get; set; }
+
+    public bool ToggleAlt { get; set; }
+
+    public bool ToggleShift { get; set; }
 
     public const int MaxWindows = 5;
 

@@ -4,7 +4,7 @@
 	<PropertyGroup>
 		<Product>DesMeter</Product>
 		<AssemblyName>DesMeter</AssemblyName>
-		<Version>0.1.4</Version>
+		<Version>0.1.5</Version>
 		<Authors>deserokk</Authors>
 		<Description>In-game combat meter reading IINACT.</Description>
 		<Nullable>enable</Nullable>
