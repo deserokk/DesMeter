@@ -79,7 +79,7 @@ internal sealed class MeterWindow : Window
 
     private const float TextInset = 6f;
 
-    private const float IconScale = 0.78f;
+    private const float IconScale = 0.66f;
 
     private const float ArtScale = 1.45f;
 
@@ -119,6 +119,8 @@ internal sealed class MeterWindow : Window
             MinimumSize = new Vector2(190, 54),
             MaximumSize = new Vector2(900, 900),
         };
+
+        this.RespectCloseHotkey = false;
     }
 
     public override bool DrawConditions()
@@ -137,9 +139,17 @@ internal sealed class MeterWindow : Window
 
         var ownGrip = this.Settings.GrowUpward && !this.Settings.Locked;
 
+        var folded = this.Settings.Collapsed;
+
         this.Flags = BaseFlags
                    | (this.Settings.Locked ? ImGuiWindowFlags.NoMove : ImGuiWindowFlags.None)
-                   | (this.Settings.Locked || ownGrip ? ImGuiWindowFlags.NoResize : ImGuiWindowFlags.None);
+                   | (this.Settings.Locked || ownGrip || folded ? ImGuiWindowFlags.NoResize : ImGuiWindowFlags.None);
+
+        this.SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(MinWidth, folded ? 16 : MinHeight),
+            MaximumSize = new Vector2(900, 900),
+        };
 
         if (this.nextSize is { } wantedSize)
         {
@@ -191,9 +201,10 @@ internal sealed class MeterWindow : Window
 
         if (this.Settings.Background.W > 0.02f) this.DrawSheen();
 
-        if (this.Settings.GrowUpward && !this.Settings.Locked) this.DrawTopGrip();
+        if (this.Settings.GrowUpward && !this.Settings.Locked && !this.Settings.Collapsed) this.DrawTopGrip();
 
-        this.HandleRightClick();
+        if (this.Settings.Collapsed) this.panel = Panel.None;
+        else this.HandleRightClick();
 
         if (this.panel != Panel.None)
         {
@@ -235,6 +246,12 @@ internal sealed class MeterWindow : Window
         var region = ImGui.GetContentRegionAvail();
         var origin = ImGui.GetCursorScreenPos();
         var up = this.Settings.GrowUpward;
+
+        if (this.Settings.Collapsed)
+        {
+            this.DrawHeader(string.Empty, string.Empty, atBottom: false);
+            return;
+        }
 
         if (!up)
         {
@@ -331,6 +348,32 @@ internal sealed class MeterWindow : Window
         this.OpenPanel(io.KeyShift ? Panel.Segments : Panel.Displays);
     }
 
+    private void ToggleFold()
+    {
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var bottom = pos.Y + size.Y;
+
+        float height;
+
+        if (!this.Settings.Collapsed)
+        {
+            this.Settings.ExpandedHeight = size.Y;
+            height = HeaderHeight + 12f;
+        }
+        else
+        {
+            height = Math.Max(MinHeight, this.Settings.ExpandedHeight > 0 ? this.Settings.ExpandedHeight : 180f);
+        }
+
+        this.Settings.Collapsed = !this.Settings.Collapsed;
+        this.nextSize = new Vector2(size.X, height);
+
+        if (this.Settings.GrowUpward) this.nextPos = new Vector2(pos.X, bottom - height);
+
+        this.config.Save();
+    }
+
     private void OpenPanel(Panel which)
     {
         this.panel = which;
@@ -368,6 +411,12 @@ internal sealed class MeterWindow : Window
 
         this.Rebuild(snap, metric);
         var caption = $"{Format.Short(this.viewRate)}  ·  {snap.Duration}";
+
+        if (this.Settings.Collapsed)
+        {
+            this.DrawHeader(title, caption, atBottom: false);
+            return;
+        }
 
         var region = ImGui.GetContentRegionAvail();
         var origin = ImGui.GetCursorScreenPos();
@@ -685,8 +734,16 @@ internal sealed class MeterWindow : Window
                 ? new Vector2(windowPos.X + windowSize.X, windowPos.Y + windowSize.Y)
                 : new Vector2(windowPos.X + windowSize.X, origin.Y + HeaderHeight);
 
-            dl.AddRectFilled(from, to, ImGui.GetColorU32(strip), Rounding,
-                             atBottom ? ImDrawFlags.RoundCornersBottom : ImDrawFlags.RoundCornersTop);
+            var corners = atBottom ? ImDrawFlags.RoundCornersBottom : ImDrawFlags.RoundCornersTop;
+
+            if (this.Settings.Collapsed)
+            {
+                from = windowPos;
+                to = windowPos + windowSize;
+                corners = ImDrawFlags.RoundCornersAll;
+            }
+
+            dl.AddRectFilled(from, to, ImGui.GetColorU32(strip), Rounding, corners);
         }
 
         dl.AddLine(new Vector2(origin.X, ruleY), new Vector2(origin.X + avail, ruleY),
@@ -694,10 +751,12 @@ internal sealed class MeterWindow : Window
 
         var cog = lineHeight * IconScale;
 
-        var cogAt = new Vector2(origin.X + avail - cog - TextInset,
-                                textAt.Y + ((lineHeight - cog) * 0.5f));
+        var foldAt = new Vector2(origin.X + avail - cog - TextInset,
+                                 textAt.Y + ((lineHeight - cog) * 0.5f));
 
-        var textWidth = avail - (cog * 5f) - 16f - (TextInset * 2f) - CaptionGap;
+        var cogAt = foldAt with { X = foldAt.X - cog - 4f };
+
+        var textWidth = avail - (cog * 6f) - 20f - (TextInset * 2f) - CaptionGap;
 
         var rightWidth = ImGui.CalcTextSize(right).X * CaptionScale;
 
@@ -713,6 +772,13 @@ internal sealed class MeterWindow : Window
             this.options.Target = this.Settings;
             this.options.IsOpen = true;
         }
+
+        var folded = this.Settings.Collapsed;
+
+        if (IconButton("##fold", foldAt, cog,
+                       folded ? FontAwesomeIcon.WindowRestore : FontAwesomeIcon.WindowMinimize,
+                       folded ? "Unfold" : "Fold down to the header", Dim with { W = 0.55f }))
+            this.ToggleFold();
 
         var armed = DateTime.UtcNow < this.armedUntil;
         var eraseAt = cogAt with { X = cogAt.X - cog - 4f };
@@ -768,7 +834,11 @@ internal sealed class MeterWindow : Window
         var clicked = ImGui.InvisibleButton(id, new Vector2(size, size));
         var hot = ImGui.IsItemHovered();
 
-        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+        var font = Plugin.Typeface.Icons is { Available: true } small
+            ? small
+            : Plugin.PluginInterface.UiBuilder.IconFontHandle;
+
+        using (font.Push())
         {
             var glyph = icon.ToIconString();
             var glyphSize = ImGui.CalcTextSize(glyph);

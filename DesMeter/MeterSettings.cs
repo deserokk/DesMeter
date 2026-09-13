@@ -45,6 +45,10 @@ internal sealed class MeterSettings
 
     public bool PvpWholeMatch { get; set; } = true;
 
+    public bool Collapsed { get; set; }
+
+    public float ExpandedHeight { get; set; }
+
     internal MeterSettings Copy(int id) => new()
     {
         Id = id,

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Bindings.ImGui;
@@ -25,6 +26,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static IPartyList Party { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
+    [PluginService] internal static IKeyState Keys { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IDataManager Data { get; private set; } = null!;
     [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
@@ -95,6 +97,7 @@ public sealed class Plugin : IDalamudPlugin
         this.link.TryConnect();
         this.link.History.Pulse();
         this.link.History.Pvp = ClientState.IsPvP;
+        this.WatchToggleKey();
         var inCombat = Condition[ConditionFlag.InCombat];
         this.ScanEnemies(inCombat);
         this.link.Watch(inCombat, this.lastEnemyHit);
@@ -145,8 +148,42 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawAll()
     {
+
+        TextInput = ImGui.GetIO().WantTextInput;
+
         Typeface.Tick(ImGui.GetFontSize());
         this.windows.Draw();
+    }
+
+    private static bool TextInput;
+    private DateTime comboLastHeld = DateTime.MinValue;
+
+    private void WatchToggleKey()
+    {
+        if (this.config.ToggleKey == VirtualKey.NO_KEY || TextInput || GameTypingActive()) return;
+
+        var held = Keys[this.config.ToggleKey]
+                && Keys[VirtualKey.CONTROL] == this.config.ToggleCtrl
+                && Keys[VirtualKey.MENU] == this.config.ToggleAlt
+                && Keys[VirtualKey.SHIFT] == this.config.ToggleShift;
+
+        if (!held) return;
+
+        var now = DateTime.UtcNow;
+        var fresh = now - this.comboLastHeld > TimeSpan.FromMilliseconds(300);
+
+        this.comboLastHeld = now;
+
+        if (fresh) this.Toggle();
+    }
+
+    private static unsafe bool GameTypingActive()
+    {
+        var ui = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance()->GetUIModule();
+        if (ui == null) return false;
+
+        var atk = ui->GetRaptureAtkModule();
+        return atk != null && atk->AtkModule.IsTextInputActive();
     }
 
     private void OnCommand(string command, string args)
