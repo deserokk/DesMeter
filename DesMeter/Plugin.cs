@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -35,6 +36,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Dictionary<uint, uint> enemyHp = new();
     private DateTime nextHpScan = DateTime.MinValue;
     private DateTime lastEnemyHit = DateTime.MinValue;
+
+    internal static Fonts Typeface { get; } = new();
 
     private readonly WindowSystem windows = new("DesMeter");
     private readonly Configuration config;
@@ -70,7 +73,7 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Show or hide the meter.",
         });
 
-        PluginInterface.UiBuilder.Draw += this.windows.Draw;
+        PluginInterface.UiBuilder.Draw += this.DrawAll;
         PluginInterface.UiBuilder.OpenMainUi += this.Toggle;
         PluginInterface.UiBuilder.OpenConfigUi += this.ToggleOptions;
         Framework.Update += this.OnUpdate;
@@ -137,6 +140,12 @@ public sealed class Plugin : IDalamudPlugin
         this.link.History.TerritoryChanged();
 
         foreach (var m in this.meters) m.TerritoryChanged();
+    }
+
+    private void DrawAll()
+    {
+        Typeface.Tick(ImGui.GetFontSize());
+        this.windows.Draw();
     }
 
     private void OnCommand(string command, string args)
@@ -239,7 +248,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         Framework.Update -= this.OnUpdate;
         ClientState.TerritoryChanged -= this.OnTerritoryChanged;
-        PluginInterface.UiBuilder.Draw -= this.windows.Draw;
+        PluginInterface.UiBuilder.Draw -= this.DrawAll;
         PluginInterface.UiBuilder.OpenMainUi -= this.Toggle;
         PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleOptions;
 
@@ -250,5 +259,6 @@ public sealed class Plugin : IDalamudPlugin
 
         this.link.History.Flush();
         this.link.Dispose();
+        Typeface.Dispose();
     }
 }
