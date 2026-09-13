@@ -94,6 +94,7 @@ public sealed class Plugin : IDalamudPlugin
 
         this.link.TryConnect();
         this.link.History.Pulse();
+        this.link.History.Pvp = ClientState.IsPvP;
         var inCombat = Condition[ConditionFlag.InCombat];
         this.ScanEnemies(inCombat);
         this.link.Watch(inCombat, this.lastEnemyHit);
