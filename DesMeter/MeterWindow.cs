@@ -81,9 +81,15 @@ internal sealed class MeterWindow : Window
 
     private const float IconScale = 0.78f;
 
+    private const float ArtScale = 1.45f;
+
     private const float CaptionGap = 10f;
 
     private const float CaptionScale = 0.85f;
+
+    private const float NameScale = 1.3f;
+
+    private static readonly Vector4 Frost = new(0.055f, 0.06f, 0.075f, 0.94f);
 
     private const int ScrollSpeed = 2;
 
@@ -1030,23 +1036,252 @@ internal sealed class MeterWindow : Window
         }
     }
 
-    private static void Details(MeterRow row)
+    private void Details(MeterRow row)
     {
+        var job = string.IsNullOrEmpty(row.Job) ? "" : row.Job.ToUpperInvariant();
+
+        var colour = Tone(JobColours.For(row.Job, row.Name), this.config.BarBrightness);
+
+        var line = ImGui.GetTextLineHeight();
+        const float pad = 10f;
+        const float gutter = 18f;
+        const float barH = 7f;
+        const float minBody = 268f;
+
+        var big = Plugin.Typeface.Name;
+        var crisp = big is { Available: true };
+
+        float nameW, nameH;
+
+        if (crisp)
+        {
+            using (big!.Push())
+            {
+                nameW = ImGui.CalcTextSize(row.Name).X;
+                nameH = ImGui.GetTextLineHeight();
+            }
+        }
+        else
+        {
+            nameW = ImGui.CalcTextSize(row.Name).X * NameScale;
+            nameH = line * NameScale;
+        }
+
+        var barW = MathF.Max(minBody, nameW + gutter + (ImGui.CalcTextSize(job).X * CaptionScale));
+
+        (string Label, string Value)[] left =
+        {
+            ("Crit", $"{row.CritPct:N1}%"),
+            ("Taken", Format.Short(row.DamageTaken)),
+        };
+
+        (string Label, string Value)[] right =
+        {
+            ("Direct hit", $"{row.DirectHitPct:N1}%"),
+            ("Deaths", row.Deaths.ToString()),
+        };
+
+        var barTop = nameH + (pad * 1.2f);
+
+        var caption = line * CaptionScale;
+        var block = line + 3f + barH + 2f + caption + (pad * 0.7f);
+
+        var width = barW + (pad * 2f);
+        var height = barTop + (pad * 0.8f) + (block * 2f) + (left.Length * line) + (pad * 0.9f)
+                   + (string.IsNullOrEmpty(row.MaxHit) ? 0f : caption + 5f + (line * ArtScale) + (pad * 0.9f));
+
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, new Vector4(0f, 0f, 0f, 0f));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, Rounding);
+
         ImGui.BeginTooltip();
 
-        ImGui.TextUnformatted(string.IsNullOrEmpty(row.Job) ? row.Name : $"{row.Name}  ({row.Job})");
-        ImGui.Separator();
+        var at = ImGui.GetCursorScreenPos();
+        ImGui.Dummy(new Vector2(width, height));
 
-        ImGui.TextUnformatted($"Damage    {Format.Short(row.Damage)}   {Format.Short(row.Dps)} dps   {row.DamagePct:N1}%");
-        ImGui.TextUnformatted($"Crit      {row.CritPct:N1}%      Direct hit  {row.DirectHitPct:N1}%");
+        var dl = ImGui.GetWindowDrawList();
+        var end = at + new Vector2(width, height);
 
-        ImGui.TextUnformatted($"Healing   {Format.Short(row.Healed)}   {Format.Short(row.Hps)} hps   {row.OverHealPct:N0}% overheal");
-        ImGui.TextUnformatted($"Taken     {Format.Short(row.DamageTaken)}      Deaths  {row.Deaths}");
+        dl.AddRectFilled(at, end, ImGui.GetColorU32(Frost), Rounding);
+
+        dl.AddRectFilled(at, new Vector2(end.X, at.Y + barTop), ImGui.GetColorU32(colour), Rounding,
+                         ImDrawFlags.RoundCornersTop);
+
+        dl.AddRectFilledMultiColor(at, new Vector2(end.X, at.Y + (barTop * 0.6f)),
+                                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
+                                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
+                                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0f)),
+                                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0f)));
+
+        dl.AddLine(new Vector2(at.X, at.Y + barTop), new Vector2(end.X, at.Y + barTop),
+                   ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.25f)));
+
+        dl.AddRect(at, end, ImGui.GetColorU32(Edge), Rounding);
+
+        var lum = (colour.X * 0.299f) + (colour.Y * 0.587f) + (colour.Z * 0.114f);
+        var ink = lum > 0.70f ? new Vector4(0.06f, 0.06f, 0.08f, 1f) : new Vector4(1f, 1f, 1f, 1f);
+
+        var nameAt = new Vector2(at.X + pad, at.Y + ((barTop - nameH) * 0.5f));
+
+        if (crisp)
+        {
+            using (big!.Push()) Shadow(nameAt, ImGui.GetColorU32(ink), row.Name);
+        }
+        else
+        {
+            Shadow(nameAt, ImGui.GetColorU32(ink), row.Name, NameScale);
+        }
+
+        if (job.Length > 0)
+        {
+            var jw = ImGui.CalcTextSize(job).X * CaptionScale;
+            Shadow(new Vector2(end.X - pad - jw, at.Y + ((barTop - (line * CaptionScale)) * 0.5f)),
+                   ImGui.GetColorU32(ink with { W = 0.75f }), job, CaptionScale);
+        }
+
+        var dim = ImGui.GetColorU32(Dim);
+        var text = ImGui.GetColorU32(ImGuiCol.Text);
+        var y = at.Y + barTop + (pad * 0.8f);
+
+        Shadow(new Vector2(at.X + pad, y), dim, "Damage");
+        Right(at.X + pad + barW, y, $"{Format.Short(row.Damage)}   {Format.Short(row.Dps)} dps", text);
+
+        var dmgAt = new Vector2(at.X + pad, y + line + 3f);
+        Rail(dl, dmgAt, barW, barH);
+        this.Shares(dl, dmgAt, barW, barH, row, r => r.DamagePct, 100f);
+
+        Centred(at.X + pad, dmgAt.Y + barH + 2f, barW, $"{row.DamagePct:N1}% of damage done", dim);
+
+        y += block;
+
+        Shadow(new Vector2(at.X + pad, y), dim, "Healing");
+        Right(at.X + pad + barW, y, $"{Format.Short(row.Healed)}   {Format.Short(row.Hps)} hps", text);
+
+        var healAt = new Vector2(at.X + pad, y + line + 3f);
+        Rail(dl, healAt, barW, barH);
+
+        var share = Frac(row.HealedPct) * 100f;
+        var wasted = MathF.Min(Frac(row.OverHealPct), 0.99f);
+        var waste = share * wasted / (1f - wasted);
+        var axis = 100f + waste;
+
+        var over = barW * waste / axis;
+
+        this.Shares(dl, healAt, barW, barH, row, r => r.HealedPct, axis);
+
+        if (over > 0.5f)
+        {
+            var line0 = healAt.X + barW - over;
+
+            Lit(dl, healAt with { X = line0 }, over, barH, new Vector4(0.62f, 0.66f, 0.74f, 0.55f));
+
+            dl.AddLine(new Vector2(line0, healAt.Y - 1f), new Vector2(line0, healAt.Y + barH + 1f),
+                       ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.85f)));
+        }
+
+        var healSays = row.Healed <= 0
+            ? "no healing done"
+            : row.OverHealPct >= 1
+                ? $"{row.HealedPct:N1}% of healing done  ·  {row.OverHealPct:N0}% overheal"
+                : $"{row.HealedPct:N1}% of healing done";
+
+        Centred(at.X + pad, healAt.Y + barH + 2f, barW, healSays, dim);
+
+        y += block;
+
+        var cell = (barW - pad) / 2f;
+
+        for (var i = 0; i < left.Length; i++)
+        {
+            Cell(at.X + pad, y, cell, left[i].Label, left[i].Value, dim, text);
+            Cell(at.X + pad + cell + pad, y, cell, right[i].Label, right[i].Value, dim, text);
+
+            y += line;
+        }
 
         if (!string.IsNullOrEmpty(row.MaxHit))
-            ImGui.TextUnformatted($"Biggest   {row.MaxHit}");
+        {
+            var (hit, amount) = Abilities.Split(row.MaxHit);
+
+            Shadow(new Vector2(at.X + pad, y + (pad * 0.55f)), dim, "Biggest hit", CaptionScale);
+
+            var hitY = y + (pad * 0.55f) + caption + 5f;
+            var art = line * ArtScale;
+            var x = at.X + pad;
+
+            var drawn = Abilities.Icon(dl, new Vector2(x, hitY), art, hit);
+            if (drawn > 0f) x += drawn + 7f;
+
+            var textY = hitY + ((art - line) * 0.5f);
+
+            Shadow(new Vector2(x, textY), ImGui.GetColorU32(ImGuiCol.Text), hit);
+
+            if (amount.Length > 0) Right(at.X + pad + barW, textY, amount, text);
+        }
 
         ImGui.EndTooltip();
+
+        ImGui.PopStyleVar(3);
+        ImGui.PopStyleColor();
+    }
+
+    private void Shares(ImDrawListPtr dl, Vector2 at, float width, float height,
+                        MeterRow self, Func<MeterRow, double> share, float axis)
+    {
+        var x = at.X;
+        var last = this.view.Count - 1;
+
+        for (var i = 0; i <= last; i++)
+        {
+            var r = this.view[i].Row;
+            var w = width * (float)Math.Clamp(share(r), 0, axis) / axis;
+
+            if (w < 0.4f) continue;
+
+            var mine = ReferenceEquals(r, self) || r.Name == self.Name;
+            var c = Tone(JobColours.For(r.Job, r.Name), this.config.BarBrightness);
+
+            var flags = i == 0 ? ImDrawFlags.RoundCornersLeft : ImDrawFlags.RoundCornersNone;
+
+            dl.AddRectFilled(new Vector2(x, at.Y), new Vector2(x + w, at.Y + height),
+                             ImGui.GetColorU32(mine ? c : c with { W = 0.26f }),
+                             height * 0.5f, flags);
+
+            if (mine)
+                dl.AddLine(new Vector2(x + 1f, at.Y + 0.5f), new Vector2(x + w - 1f, at.Y + 0.5f),
+                           ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.30f)));
+
+            x += w;
+        }
+    }
+
+    private static float Frac(double percent) => Math.Clamp((float)percent / 100f, 0f, 1f);
+
+    private static void Rail(ImDrawListPtr dl, Vector2 at, float width, float height)
+        => dl.AddRectFilled(at, at + new Vector2(width, height), ImGui.GetColorU32(Track), height * 0.5f);
+
+    private static void Lit(ImDrawListPtr dl, Vector2 at, float width, float height, Vector4 colour)
+    {
+        if (width < 1f) return;
+
+        dl.AddRectFilled(at, at + new Vector2(width, height), ImGui.GetColorU32(colour), height * 0.5f);
+
+        dl.AddLine(at + new Vector2(1f, 0.5f), at + new Vector2(width - 1f, 0.5f),
+                   ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.30f)));
+    }
+
+    private static void Centred(float x, float y, float width, string text, uint colour)
+        => Shadow(new Vector2(x + ((width - (ImGui.CalcTextSize(text).X * CaptionScale)) * 0.5f), y),
+                  colour, text, CaptionScale);
+
+    private static void Right(float rightEdge, float y, string text, uint colour)
+        => Shadow(new Vector2(rightEdge - ImGui.CalcTextSize(text).X, y), colour, text);
+
+    private static void Cell(float x, float y, float width, string label, string value, uint dim, uint ink)
+    {
+        Shadow(new Vector2(x, y), dim, label);
+        Shadow(new Vector2(x + width - ImGui.CalcTextSize(value).X, y), ink, value);
     }
 
     private static void Shadow(Vector2 pos, uint colour, string text, float scale)
