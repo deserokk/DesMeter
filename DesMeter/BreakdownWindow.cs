@@ -31,6 +31,7 @@ internal sealed class BreakdownWindow : Window, IDisposable
 
     private Snapshot? abilitiesFor;
     private FightAbilities? reportedRecording;
+    private string noLog = string.Empty;
     private CancellationTokenSource? cancel;
 
     private readonly HashSet<string> expanded = new(StringComparer.Ordinal);
@@ -66,6 +67,8 @@ internal sealed class BreakdownWindow : Window, IDisposable
             this.cancel = new CancellationTokenSource();
             this.abilitiesFor = from;
             this.expanded.Clear();
+
+            this.noLog = string.IsNullOrEmpty(from.LogFile) ? LogAnchor.Diagnose() : string.Empty;
 
             this.abilities = from.Title == "Overall" || IsPvp(from) || string.IsNullOrEmpty(from.LogFile)
                 ? null
@@ -613,7 +616,7 @@ internal sealed class BreakdownWindow : Window, IDisposable
         {
             ImGui.TextDisabled(snap.Title == "Overall"
                 ? "Abilities are per pull. Open a single fight from the list."
-                : "This fight has no log position recorded, so it can't be read.");
+                : this.noLog);
             return;
         }
 

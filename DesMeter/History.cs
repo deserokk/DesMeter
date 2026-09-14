@@ -28,6 +28,7 @@ internal sealed class History
     private Snapshot? overallCache;
     private Snapshot? overallFrom_;
     private int overallCount;
+    private int overallCachedFrom = -1;
 
     private string? file;
     private string? beatFile;
@@ -130,6 +131,8 @@ internal sealed class History
     }
 
     internal Func<Snapshot, string, string?>? Record;
+
+    internal Snapshot? Match => this.Pvp ? this.live : null;
 
     internal volatile bool Pvp;
 
@@ -331,6 +334,7 @@ internal sealed class History
             if (this.live is { } last) this.Archive(last);
             this.live = null;
             this.overallFrom = this.segments.Count;
+            this.overallCache = null;
 
             this.pvpTally.Clear();
             this.pvpLastSeconds = 0;
@@ -348,7 +352,8 @@ internal sealed class History
 
             if (this.overallCache is not null
                 && ReferenceEquals(this.overallFrom_, this.live)
-                && this.overallCount == this.segments.Count)
+                && this.overallCount == this.segments.Count
+                && this.overallCachedFrom == this.overallFrom)
                 return this.overallCache;
 
             var scope = new List<Snapshot>();
@@ -415,6 +420,7 @@ internal sealed class History
             this.overallCache = built;
             this.overallFrom_ = this.live;
             this.overallCount = this.segments.Count;
+            this.overallCachedFrom = this.overallFrom;
 
             return built;
         }

@@ -182,7 +182,6 @@ public sealed class Plugin : IDalamudPlugin
         this.link.History.TerritoryChanged();
         this.EnterZone(use);
 
-        foreach (var m in this.meters) m.TerritoryChanged();
     }
 
     private void DrawAll()
