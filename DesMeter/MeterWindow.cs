@@ -43,7 +43,9 @@ internal sealed class MeterWindow : Window
 
     private Snapshot? viewOf;
     private Metric viewMetric;
-    private bool viewPets, viewShowLb, viewCountLb;
+    private bool viewPets, viewShowLb, viewCountLb, viewTeams;
+    private float viewBrightness;
+    private int viewTeamsVersion;
     private double viewMax, viewDenominator, viewRate;
 
     private readonly List<Rendered> visible = new();
@@ -52,7 +54,7 @@ internal sealed class MeterWindow : Window
 
     private float Ease => 3f / Math.Max(0.25f, this.link.Cadence);
 
-    private readonly record struct Rendered(int Rank, MeterRow Row, string Left, string Right);
+    private readonly record struct Rendered(int Rank, MeterRow Row, string Left, string Right, Vector4 Colour);
 
     private bool overall;
 
@@ -498,7 +500,10 @@ internal sealed class MeterWindow : Window
             && this.viewMetric == this.Settings.Metric
             && this.viewPets == this.config.CombinePets
             && this.viewShowLb == this.Settings.ShowLimitBreak
-            && this.viewCountLb == this.Settings.CountLimitBreak)
+            && this.viewCountLb == this.Settings.CountLimitBreak
+            && this.viewTeams == this.config.TeamColours
+            && Math.Abs(this.viewBrightness - this.config.BarBrightness) < 0.0001f
+            && (!this.config.TeamColours || this.viewTeamsVersion == Teams.Version))
             return;
 
         this.viewOf = snap;
@@ -506,6 +511,9 @@ internal sealed class MeterWindow : Window
         this.viewPets = this.config.CombinePets;
         this.viewShowLb = this.Settings.ShowLimitBreak;
         this.viewCountLb = this.Settings.CountLimitBreak;
+        this.viewTeams = this.config.TeamColours;
+        this.viewBrightness = this.config.BarBrightness;
+        this.viewTeamsVersion = Teams.Version;
 
         this.view.Clear();
 
@@ -574,7 +582,8 @@ internal sealed class MeterWindow : Window
                 ? $"{Format.Short(total)} ({Format.Short(rate)}, {share:N1}%)"
                 : $"{Format.Short(total)} ({share:N1}%)";
 
-            this.view.Add(new Rendered(rank, row, $"{rank}. {row.Name}", right));
+            this.view.Add(new Rendered(rank, row, $"{rank}. {row.Name}", right,
+                Tone(Teams.Colour(row.Job, row.Name, this.config.TeamColours), this.config.BarBrightness)));
         }
     }
 
@@ -911,7 +920,7 @@ internal sealed class MeterWindow : Window
 
         var frac = max > 0 ? (float)(total / max) : 0f;
         frac = this.Advance(row.Name, frac);
-        var colour = Tone(JobColours.For(row.Job, row.Name), this.config.BarBrightness);
+        var colour = entry.Colour;
 
         var barX = p.X;
         var barWidth = width;
@@ -937,7 +946,7 @@ internal sealed class MeterWindow : Window
             dl.AddRectFilled(barOrigin, barEnd,
                              ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.07f)), BarRounding);
 
-            Details(row);
+            this.Details(row, entry.Colour);
 
             if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && this.shown is { } source)
                 this.OpenBreakdown?.Invoke(source, row.Name);
@@ -1106,11 +1115,9 @@ internal sealed class MeterWindow : Window
         }
     }
 
-    private void Details(MeterRow row)
+    private void Details(MeterRow row, Vector4 colour)
     {
         var job = string.IsNullOrEmpty(row.Job) ? "" : row.Job.ToUpperInvariant();
-
-        var colour = Tone(JobColours.For(row.Job, row.Name), this.config.BarBrightness);
 
         var line = ImGui.GetTextLineHeight();
         const float pad = 10f;
@@ -1330,7 +1337,7 @@ internal sealed class MeterWindow : Window
             if (w < 0.4f) continue;
 
             var mine = ReferenceEquals(r, self) || r.Name == self.Name;
-            var c = Tone(JobColours.For(r.Job, r.Name), this.config.BarBrightness);
+            var c = this.view[i].Colour;
 
             var flags = i == 0 ? ImDrawFlags.RoundCornersLeft : ImDrawFlags.RoundCornersNone;
 

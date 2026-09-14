@@ -209,6 +209,13 @@ internal sealed class OptionsWindow : Window
             this.config.Save();
         }
 
+        var teams = this.config.TeamColours;
+        if (ImGui.Checkbox("Colour by team in Frontlines", ref teams))
+        {
+            this.config.TeamColours = teams;
+            this.config.Save();
+        }
+
         var skull = this.config.DeathSkull;
         if (ImGui.Checkbox("Skull for deaths instead of a cross", ref skull))
         {

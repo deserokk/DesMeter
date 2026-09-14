@@ -11,6 +11,12 @@ internal sealed class BreakdownWindow : Window
     private readonly Configuration config;
 
     private Snapshot? snapshot;
+
+    private readonly Dictionary<string, Vector4> colours = new(StringComparer.Ordinal);
+
+    private Snapshot? coloursFor;
+    private bool coloursTeams;
+    private int coloursVersion;
     private string who = string.Empty;
 
     internal BreakdownWindow(Configuration config) : base("DesMeter breakdown###DesMeterBreakdown")
@@ -68,7 +74,7 @@ internal sealed class BreakdownWindow : Window
     {
         foreach (var row in snap.Rows)
         {
-            var colour = JobColours.For(row.Job, row.Name);
+            var colour = this.ColourOf(row);
 
             ImGui.PushStyleColor(ImGuiCol.Text, colour);
             var picked = ImGui.Selectable($"{row.Name}##rail{row.Name}", row.Name == this.who);
@@ -126,6 +132,26 @@ internal sealed class BreakdownWindow : Window
         ImGui.TextDisabled("They are not shown rather than shown wrong.");
     }
 
+    private Vector4 ColourOf(MeterRow row)
+    {
+        var teams = this.config.TeamColours;
+
+        if (!ReferenceEquals(this.coloursFor, this.snapshot)
+            || this.coloursTeams != teams
+            || (teams && this.coloursVersion != Teams.Version))
+        {
+            this.colours.Clear();
+            this.coloursFor = this.snapshot;
+            this.coloursTeams = teams;
+            this.coloursVersion = Teams.Version;
+        }
+
+        if (!this.colours.TryGetValue(row.Name, out var colour))
+            this.colours[row.Name] = colour = Teams.Colour(row.Job, row.Name, teams);
+
+        return colour;
+    }
+
     private static void Stat(string label, string value)
     {
         ImGui.TableNextColumn();
@@ -159,7 +185,7 @@ internal sealed class BreakdownWindow : Window
             if (r.Damage <= 0) continue;
 
             var sweep = (float)(r.Damage / total) * MathF.PI * 2f;
-            var colour = JobColours.For(r.Job, r.Name);
+            var colour = this.ColourOf(r);
             var picked = r.Name == highlight;
             var under = r.Name == hovered;
 
@@ -199,7 +225,7 @@ internal sealed class BreakdownWindow : Window
             {
                 if (r.Damage <= 0) continue;
 
-                ImGui.PushStyleColor(ImGuiCol.Text, JobColours.For(r.Job, r.Name));
+                ImGui.PushStyleColor(ImGuiCol.Text, this.ColourOf(r));
 
                 if (ImGui.Selectable($"{r.Damage / total * 100:N1}%   {r.Name}", r.Name == highlight))
                     this.who = r.Name;

@@ -21,6 +21,8 @@ internal sealed class Configuration : IPluginConfiguration
 
     public bool ToggleShift { get; set; }
 
+    public bool TeamColours { get; set; }
+
     public const int MaxWindows = 5;
 
     public int NextWindowId { get; set; } = 1;
