@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Command;
@@ -80,6 +81,8 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += this.ToggleOptions;
         Framework.Update += this.OnUpdate;
         ClientState.TerritoryChanged += this.OnTerritoryChanged;
+
+        Teams.Enter(ClientState.TerritoryType);
     }
 
     private void OnUpdate(IFramework _)
@@ -97,6 +100,7 @@ public sealed class Plugin : IDalamudPlugin
         this.link.TryConnect();
         this.link.History.Pulse();
         this.link.History.Pvp = ClientState.IsPvP;
+        Teams.Scan();
         this.WatchToggleKey();
         var inCombat = Condition[ConditionFlag.InCombat];
         this.ScanEnemies(inCombat);
@@ -142,6 +146,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnTerritoryChanged(uint territory)
     {
         this.link.History.TerritoryChanged();
+        Teams.Enter(territory);
 
         foreach (var m in this.meters) m.TerritoryChanged();
     }
@@ -176,6 +181,9 @@ public sealed class Plugin : IDalamudPlugin
 
         if (fresh) this.Toggle();
     }
+
+    private static unsafe byte Battalion(IPlayerCharacter pc)
+        => ((FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)pc.Address)->Battalion;
 
     private static unsafe bool GameTypingActive()
     {
@@ -220,6 +228,28 @@ public sealed class Plugin : IDalamudPlugin
 
             Probe.Line($"  npc \"{npc.Name.TextValue}\" kind={npc.ObjectKind} subKind={npc.BattleNpcKind} "
                      + $"ownerId={npc.OwnerId:X} entityId={npc.EntityId:X}");
+        }
+
+        var intended = Data.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>()
+                           .GetRowOrDefault(ClientState.TerritoryType)?.TerritoryIntendedUse.RowId;
+
+        Probe.Line($"pvp={ClientState.IsPvP} territory={ClientState.TerritoryType} intendedUse={intended} "
+                 + $"teamsGate={Teams.InFrontlines}");
+
+        var players = 0;
+
+        foreach (var obj in Objects)
+        {
+            if (obj is not IPlayerCharacter pc) continue;
+            if (players++ > 80) break;
+
+            var flags = pc.StatusFlags;
+
+            Probe.Line($"  player \"{pc.Name.TextValue}\" battalion={Battalion(pc)} "
+                     + $"hostile={flags.HasFlag(StatusFlags.Hostile)} "
+                     + $"party={flags.HasFlag(StatusFlags.PartyMember)} "
+                     + $"alliance={flags.HasFlag(StatusFlags.AllianceMember)} "
+                     + $"job={pc.ClassJob.RowId} self={pc.EntityId == Objects.LocalPlayer?.EntityId}");
         }
 
         Probe.Line("── end ─────────────────────────────────────────");
