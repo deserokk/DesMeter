@@ -120,7 +120,7 @@ internal sealed class BreakdownWindow : Window
         ImGui.Separator();
         ImGui.Spacing();
 
-        ImGui.TextUnformatted("Share of the pull");
+        ImGui.TextUnformatted("Share of damage done");
         ImGui.Spacing();
 
         this.DrawPie(snap, row.Name);
