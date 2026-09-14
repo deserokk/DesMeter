@@ -16,7 +16,6 @@ internal sealed class BreakdownWindow : Window
 
     private Snapshot? coloursFor;
     private bool coloursTeams;
-    private int coloursVersion;
     private string who = string.Empty;
 
     internal BreakdownWindow(Configuration config) : base("DesMeter breakdown###DesMeterBreakdown")
@@ -137,17 +136,15 @@ internal sealed class BreakdownWindow : Window
         var teams = this.config.TeamColours;
 
         if (!ReferenceEquals(this.coloursFor, this.snapshot)
-            || this.coloursTeams != teams
-            || (teams && this.coloursVersion != Teams.Version))
+            || this.coloursTeams != teams)
         {
             this.colours.Clear();
             this.coloursFor = this.snapshot;
             this.coloursTeams = teams;
-            this.coloursVersion = Teams.Version;
         }
 
         if (!this.colours.TryGetValue(row.Name, out var colour))
-            this.colours[row.Name] = colour = Teams.Colour(row.Job, row.Name, teams);
+            this.colours[row.Name] = colour = Teams.Colour(row, this.snapshot?.TeamMode ?? 0, teams);
 
         return colour;
     }

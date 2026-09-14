@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Numerics;
 
@@ -14,34 +14,46 @@ internal static class Teams
 
     private static readonly System.Collections.Generic.HashSet<uint> Placed = new();
 
-    internal static volatile int Version;
+    private const uint FrontlineUse = 18, CrystallineUse = 28;
 
-    private const uint FrontlineUse = 18;
-
-    internal static volatile bool InFrontlines;
-
-    private static readonly Vector4[] Colours =
+    private static readonly Vector4[] Frontline =
     {
         new(0.70f, 0.20f, 0.18f, 1f),
         new(0.80f, 0.66f, 0.20f, 1f),
         new(0.22f, 0.45f, 0.80f, 1f),
     };
 
-    internal static void Enter(uint territory)
+    private static readonly Vector4[] Crystalline =
+    {
+        new(0.22f, 0.50f, 0.85f, 1f),
+        new(0.80f, 0.28f, 0.35f, 1f),
+    };
+
+    private static Vector4[]? PaletteFor(int use) => use switch
+    {
+        (int)FrontlineUse => Frontline,
+        (int)CrystallineUse => Crystalline,
+        _ => null,
+    };
+
+    private static volatile Vector4[]? palette;
+
+    internal static volatile int Mode;
+
+    internal static bool Active => palette != null;
+
+    internal static void Enter(uint use)
     {
         ByName.Clear();
         Placed.Clear();
-        Version++;
-
-        var use = Plugin.Data.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>()
-                            .GetRowOrDefault(territory)?.TerritoryIntendedUse.RowId ?? uint.MaxValue;
-
-        InFrontlines = use == FrontlineUse;
+        palette = PaletteFor((int)use);
+        Mode = palette is null ? 0 : (int)use;
     }
 
     internal static unsafe void Scan()
     {
-        if (!InFrontlines) return;
+        var colours = palette;
+        if (colours == null) return;
 
         var now = DateTime.UtcNow;
         if (now < nextScan) return;
@@ -55,23 +67,24 @@ internal static class Teams
             if (Placed.Contains(pc.EntityId)) continue;
 
             var team = ((FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)pc.Address)->Battalion;
-            if (team > 2) continue;
+            if (team >= colours.Length) continue;
 
             ByName[pc.Name.TextValue] = team;
             Placed.Add(pc.EntityId);
-            Version++;
 
             if (pc.EntityId == me) ByName["YOU"] = team;
         }
     }
 
-    internal static Vector4 Colour(string job, string name, bool wanted)
+    internal static Vector4 Colour(MeterRow row, int mode, bool wanted)
     {
-        if (wanted && InFrontlines && ByName.TryGetValue(Owner(name), out var team))
-            return Colours[team];
+        if (wanted && row.Team >= 0 && PaletteFor(mode) is { } colours && row.Team < colours.Length)
+            return colours[row.Team];
 
-        return JobColours.For(job, name);
+        return JobColours.For(row.Job, row.Name);
     }
+
+    internal static int Of(string name) => ByName.TryGetValue(Owner(name), out var team) ? team : -1;
 
     private static string Owner(string name)
     {

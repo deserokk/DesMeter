@@ -127,6 +127,8 @@ internal sealed class History
 
     internal volatile bool Pvp;
 
+    internal volatile string PvpTitle = "PvP";
+
     private void ObservePvp(Snapshot next)
     {
 
@@ -134,22 +136,31 @@ internal sealed class History
             foreach (var t in this.pvpTally.Values) t.Reset();
 
         this.pvpLastSeconds = next.DurationSeconds;
-        this.pvpStarted ??= next.StartedAt;
+
+        var baseline = !this.pvpPrimed;
+        this.pvpPrimed = true;
+
+        var gained = false;
 
         foreach (var row in next.Rows)
         {
             if (!this.pvpTally.TryGetValue(row.Name, out var tally))
                 this.pvpTally[row.Name] = tally = new Tally();
 
-            tally.Take(row);
+            if (baseline) tally.Baseline(row);
+            else gained |= tally.Take(row);
         }
 
-        this.live = this.StickySnapshot(next);
+        if (gained) this.pvpStarted ??= next.CapturedAt.AddSeconds(-Math.Max(0, next.DurationSeconds));
+
+        this.live = this.pvpStarted is null ? null : this.StickySnapshot(next);
     }
 
     private readonly Dictionary<string, Tally> pvpTally = new(StringComparer.Ordinal);
     private int pvpLastSeconds;
     private DateTime? pvpStarted;
+
+    private bool pvpPrimed = true;
 
     private sealed class Tally
     {
@@ -157,12 +168,26 @@ internal sealed class History
         internal double Damage, Healed, Taken, HealsTaken;
         internal int Deaths;
 
+        internal bool Counted;
+
         private double lastDamage, lastHealed, lastTaken, lastHealsTaken;
         private int lastDeaths;
 
-        internal void Take(MeterRow row)
+        internal void Baseline(MeterRow row)
         {
             this.Latest = row;
+            this.lastDamage = row.Damage;
+            this.lastHealed = row.Healed;
+            this.lastTaken = row.DamageTaken;
+            this.lastHealsTaken = row.HealsTaken;
+            this.lastDeaths = row.Deaths;
+        }
+
+        internal bool Take(MeterRow row)
+        {
+            this.Latest = row;
+
+            var before = this.Damage + this.Healed + this.Taken + this.HealsTaken + this.Deaths;
 
             this.Damage += Gain(ref this.lastDamage, row.Damage);
             this.Healed += Gain(ref this.lastHealed, row.Healed);
@@ -172,6 +197,10 @@ internal sealed class History
             var d = (double)this.lastDeaths;
             this.Deaths += (int)Gain(ref d, row.Deaths);
             this.lastDeaths = (int)d;
+
+            var gained = this.Damage + this.Healed + this.Taken + this.HealsTaken + this.Deaths > before;
+            this.Counted |= gained;
+            return gained;
         }
 
         private static double Gain(ref double last, double now)
@@ -191,13 +220,16 @@ internal sealed class History
     private Snapshot StickySnapshot(Snapshot next)
     {
         var seconds = Math.Max(1, (int)(next.CapturedAt - (this.pvpStarted ?? next.StartedAt)).TotalSeconds);
-        var tallies = this.pvpTally.Values.ToList();
+        var tallies = this.pvpTally.Values.Where(t => t.Counted).ToList();
 
         var damage = tallies.Sum(t => t.Damage);
         var healed = tallies.Sum(t => t.Healed);
 
+        var mode = Teams.Mode;
+
         var rows = tallies.Select(t => t.Latest with
         {
+            Team = mode == 0 ? -1 : Teams.Of(t.Latest.Name),
             Damage = t.Damage,
             Healed = t.Healed,
             Deaths = t.Deaths,
@@ -213,7 +245,8 @@ internal sealed class History
 
         return new Snapshot
         {
-            Title = next.Title,
+            Title = this.PvpTitle,
+            TeamMode = mode,
             Zone = next.Zone,
             Duration = $"{(int)span.TotalMinutes:00}:{span.Seconds:00}",
             DurationSeconds = seconds,
@@ -284,6 +317,7 @@ internal sealed class History
             this.pvpTally.Clear();
             this.pvpLastSeconds = 0;
             this.pvpStarted = null;
+            this.pvpPrimed = false;
         }
     }
 
@@ -344,6 +378,8 @@ internal sealed class History
             var built = new Snapshot
             {
                 Title = "Overall",
+
+                TeamMode = scope[^1].TeamMode,
                 Zone = scope[^1].Zone,
                 Duration = $"{seconds / 60:00}:{seconds % 60:00}",
                 DurationSeconds = seconds,

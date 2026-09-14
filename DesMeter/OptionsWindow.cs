@@ -210,7 +210,7 @@ internal sealed class OptionsWindow : Window
         }
 
         var teams = this.config.TeamColours;
-        if (ImGui.Checkbox("Colour by team in Frontlines", ref teams))
+        if (ImGui.Checkbox("Colour by team in PvP", ref teams))
         {
             this.config.TeamColours = teams;
             this.config.Save();
