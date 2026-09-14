@@ -26,12 +26,16 @@ internal sealed record MeterRow(
     public double HealsTaken { get; init; }
 
     public string MaxHit { get; init; } = string.Empty;
+
+    public int Team { get; init; } = -1;
 }
 
 internal sealed class Snapshot
 {
     public string Title = string.Empty;
     public string Zone = string.Empty;
+
+    public int TeamMode;
     public string Duration = string.Empty;
 
     public int DurationSeconds;

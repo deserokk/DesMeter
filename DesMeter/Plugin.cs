@@ -82,8 +82,14 @@ public sealed class Plugin : IDalamudPlugin
         Framework.Update += this.OnUpdate;
         ClientState.TerritoryChanged += this.OnTerritoryChanged;
 
-        Teams.Enter(ClientState.TerritoryType);
+        var use = IntendedUse(ClientState.TerritoryType);
+        this.link.History.PvpTitle = PvpTitle(use);
+        Teams.Enter(use);
     }
+
+    private static uint IntendedUse(uint territory)
+        => Data.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>()
+               .GetRowOrDefault(territory)?.TerritoryIntendedUse.RowId ?? uint.MaxValue;
 
     private void OnUpdate(IFramework _)
     {
@@ -143,10 +149,21 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private static string PvpTitle(uint use) => use switch
+    {
+        18 => "Frontline",
+        28 or 37 => "Crystalline Conflict",
+        39 => "Rival Wings",
+        _ => "PvP",
+    };
+
     private void OnTerritoryChanged(uint territory)
     {
+        var use = IntendedUse(territory);
+
         this.link.History.TerritoryChanged();
-        Teams.Enter(territory);
+        this.link.History.PvpTitle = PvpTitle(use);
+        Teams.Enter(use);
 
         foreach (var m in this.meters) m.TerritoryChanged();
     }
@@ -234,7 +251,7 @@ public sealed class Plugin : IDalamudPlugin
                            .GetRowOrDefault(ClientState.TerritoryType)?.TerritoryIntendedUse.RowId;
 
         Probe.Line($"pvp={ClientState.IsPvP} territory={ClientState.TerritoryType} intendedUse={intended} "
-                 + $"teamsGate={Teams.InFrontlines}");
+                 + $"teamsGate={Teams.Active}");
 
         var players = 0;
 

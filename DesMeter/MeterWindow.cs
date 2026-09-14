@@ -45,7 +45,6 @@ internal sealed class MeterWindow : Window
     private Metric viewMetric;
     private bool viewPets, viewShowLb, viewCountLb, viewTeams;
     private float viewBrightness;
-    private int viewTeamsVersion;
     private double viewMax, viewDenominator, viewRate;
 
     private readonly List<Rendered> visible = new();
@@ -502,8 +501,7 @@ internal sealed class MeterWindow : Window
             && this.viewShowLb == this.Settings.ShowLimitBreak
             && this.viewCountLb == this.Settings.CountLimitBreak
             && this.viewTeams == this.config.TeamColours
-            && Math.Abs(this.viewBrightness - this.config.BarBrightness) < 0.0001f
-            && (!this.config.TeamColours || this.viewTeamsVersion == Teams.Version))
+            && Math.Abs(this.viewBrightness - this.config.BarBrightness) < 0.0001f)
             return;
 
         this.viewOf = snap;
@@ -513,7 +511,6 @@ internal sealed class MeterWindow : Window
         this.viewCountLb = this.Settings.CountLimitBreak;
         this.viewTeams = this.config.TeamColours;
         this.viewBrightness = this.config.BarBrightness;
-        this.viewTeamsVersion = Teams.Version;
 
         this.view.Clear();
 
@@ -583,7 +580,7 @@ internal sealed class MeterWindow : Window
                 : $"{Format.Short(total)} ({share:N1}%)";
 
             this.view.Add(new Rendered(rank, row, $"{rank}. {row.Name}", right,
-                Tone(Teams.Colour(row.Job, row.Name, this.config.TeamColours), this.config.BarBrightness)));
+                Tone(Teams.Colour(row, snap.TeamMode, this.config.TeamColours), this.config.BarBrightness)));
         }
     }
 
