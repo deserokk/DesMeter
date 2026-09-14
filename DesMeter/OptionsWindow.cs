@@ -21,6 +21,8 @@ internal sealed class OptionsWindow : Window
 
     private bool dirty;
 
+    private float pendingTextScale = 1f;
+
     internal OptionsWindow(Configuration config) : base("DesMeter options###DesMeterOptions")
     {
         this.config = config;
@@ -197,10 +199,9 @@ internal sealed class OptionsWindow : Window
         ImGui.SetNextItemWidth(150);
 
         if (ImGui.SliderFloat("Bar brightness", ref brightness, 0.25f, 1f, "%.2f"))
-        {
             this.config.BarBrightness = brightness;
-            this.config.Save();
-        }
+
+        if (ImGui.IsItemDeactivatedAfterEdit()) this.config.Save();
 
         var pets = this.config.CombinePets;
         if (ImGui.Checkbox("Fold pets into their owner", ref pets))
@@ -214,6 +215,35 @@ internal sealed class OptionsWindow : Window
         {
             this.config.TeamColours = teams;
             this.config.Save();
+        }
+
+        var size = Math.Clamp(this.config.BreakdownSize, 0, BreakdownWindow.Sizes.Length - 1);
+        ImGui.SetNextItemWidth(150);
+
+        if (ImGui.BeginCombo("Breakdown window size", BreakdownWindow.Sizes[size].Name))
+        {
+            for (var i = 0; i < BreakdownWindow.Sizes.Length; i++)
+            {
+                if (ImGui.Selectable(BreakdownWindow.Sizes[i].Name, i == size))
+                {
+                    this.config.BreakdownSize = i;
+                    this.config.Save();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.SetNextItemWidth(150);
+        ImGui.SliderFloat("Breakdown text size", ref this.pendingTextScale, 0.7f, 2f, "%.2fx");
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            this.config.BreakdownTextScale = this.pendingTextScale;
+            this.config.Save();
+        }
+        else if (!ImGui.IsItemActive())
+        {
+            this.pendingTextScale = this.config.BreakdownTextScale;
         }
 
         var skull = this.config.DeathSkull;

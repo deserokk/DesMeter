@@ -23,6 +23,10 @@ internal sealed class Configuration : IPluginConfiguration
 
     public bool TeamColours { get; set; }
 
+    public int BreakdownSize { get; set; } = 1;
+
+    public float BreakdownTextScale { get; set; } = 1f;
+
     public const int MaxWindows = 5;
 
     public int NextWindowId { get; set; } = 1;

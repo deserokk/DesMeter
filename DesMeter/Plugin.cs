@@ -47,6 +47,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IinactLink link;
     private readonly OptionsWindow options;
     private readonly BreakdownWindow breakdown;
+    private readonly FightRecorder recorder = new();
 
     private readonly List<MeterWindow> meters = new();
 
@@ -56,10 +57,19 @@ public sealed class Plugin : IDalamudPlugin
         this.config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         this.link = new IinactLink();
         this.link.History.Open();
+        this.link.History.Record = this.recorder.Save;
+
+        LogReader.LimitBreaks = () => System.Linq.Enumerable.ToHashSet(System.Linq.Enumerable.Select(
+            System.Linq.Enumerable.Where(Data.GetExcelSheet<Lumina.Excel.Sheets.Action>(), a => a.ActionCategory.RowId == 9),
+            a => a.RowId));
+
+        ShieldStatus.Source = () => System.Linq.Enumerable.Select(
+            Data.GetExcelSheet<Lumina.Excel.Sheets.Status>(),
+            s => (s.RowId, s.Name.ExtractText(), s.Description.ExtractText()));
         this.config.Migrate();
 
         this.options = new OptionsWindow(this.config);
-        this.breakdown = new BreakdownWindow(this.config);
+        this.breakdown = new BreakdownWindow(this.config, () => this.link.LocalName);
 
         this.windows.AddWindow(this.options);
         this.windows.AddWindow(this.breakdown);
@@ -82,7 +92,15 @@ public sealed class Plugin : IDalamudPlugin
         Framework.Update += this.OnUpdate;
         ClientState.TerritoryChanged += this.OnTerritoryChanged;
 
-        var use = IntendedUse(ClientState.TerritoryType);
+        this.EnterZone(IntendedUse(ClientState.TerritoryType));
+    }
+
+    internal static volatile bool PvpMatch;
+
+    private void EnterZone(uint use)
+    {
+        PvpMatch = use is 18 or 28 or 37 or 39;
+        this.link.History.Pvp = PvpMatch;
         this.link.History.PvpTitle = PvpTitle(use);
         Teams.Enter(use);
     }
@@ -105,10 +123,10 @@ public sealed class Plugin : IDalamudPlugin
 
         this.link.TryConnect();
         this.link.History.Pulse();
-        this.link.History.Pvp = ClientState.IsPvP;
         Teams.Scan();
         this.WatchToggleKey();
         var inCombat = Condition[ConditionFlag.InCombat];
+        this.recorder.Tick(inCombat, PvpMatch);
         this.ScanEnemies(inCombat);
         this.link.Watch(inCombat, this.lastEnemyHit);
         this.NoteTarget();
@@ -162,8 +180,7 @@ public sealed class Plugin : IDalamudPlugin
         var use = IntendedUse(territory);
 
         this.link.History.TerritoryChanged();
-        this.link.History.PvpTitle = PvpTitle(use);
-        Teams.Enter(use);
+        this.EnterZone(use);
 
         foreach (var m in this.meters) m.TerritoryChanged();
     }
@@ -216,6 +233,13 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Trim().StartsWith("probe", StringComparison.OrdinalIgnoreCase))
         {
             this.DumpWho();
+            return;
+        }
+
+        if (args.Trim().StartsWith("perfsniff", StringComparison.OrdinalIgnoreCase))
+        {
+            this.recorder.Arm();
+            Chat.Print("DesMeter: timing the fight recorder for your next fight, into probe.log.");
             return;
         }
 
@@ -345,5 +369,6 @@ public sealed class Plugin : IDalamudPlugin
         this.link.History.Flush();
         this.link.Dispose();
         Typeface.Dispose();
+        this.breakdown.Dispose();
     }
 }
