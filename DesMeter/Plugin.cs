@@ -270,7 +270,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         Probe.Line("── end ─────────────────────────────────────────");
-        Chat.Print("DesMeter: wrote who-is-here to probe.log");
+        Chat.Print("DesMeter: probe saved.");
     }
 
     private void Toggle()
