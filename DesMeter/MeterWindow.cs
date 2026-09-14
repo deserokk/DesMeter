@@ -213,7 +213,7 @@ internal sealed class MeterWindow : Window
             return;
         }
 
-        var wholeMatch = this.Settings.PvpWholeMatch && !this.viewChosen && Plugin.ClientState.IsPvP;
+        var wholeMatch = this.Settings.PvpWholeMatch && !this.viewChosen && Plugin.PvpMatch;
 
         if (this.link.Stalled) this.DrawStalled();
 

@@ -41,10 +41,15 @@ internal static class LogAnchor
 
             var newest = new DirectoryInfo(dir)
                          .GetFiles("Network_*.log")
-                         .OrderByDescending(f => f.LastWriteTimeUtc)
+                         .OrderByDescending(f => f.CreationTimeUtc)
                          .FirstOrDefault();
 
-            return newest is null ? (string.Empty, 0) : (newest.FullName, newest.Length);
+            if (newest is null) return (string.Empty, 0);
+
+            using var stream = new FileStream(newest.FullName, FileMode.Open, FileAccess.Read,
+                                              FileShare.ReadWrite | FileShare.Delete);
+
+            return (newest.FullName, stream.Length);
         }
         catch (Exception ex)
         {

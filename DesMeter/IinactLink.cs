@@ -36,6 +36,8 @@ internal sealed class Snapshot
     public string Zone = string.Empty;
 
     public int TeamMode;
+
+    public bool Pvp;
     public string Duration = string.Empty;
 
     public int DurationSeconds;
@@ -45,6 +47,8 @@ internal sealed class Snapshot
     public DateTime StartedAt = DateTime.Now;
 
     public string LogFile = string.Empty;
+
+    public string RecordingFile = string.Empty;
 
     public long LogOffset;
     public double RaidDps;
@@ -200,7 +204,8 @@ internal sealed class IinactLink : IDisposable
             }
 
             this.History.Observe(snapshot);
-            this.Current = snapshot;
+
+            if (HasAnything(snapshot) || this.Current is null) this.Current = snapshot;
         }
         catch (Exception ex)
         {
@@ -246,6 +251,16 @@ internal sealed class IinactLink : IDisposable
     private DateTime? damageSince;
     private DateTime lastAdvance = DateTime.UtcNow;
     private double lastAdvanceTotal;
+
+    private static bool HasAnything(Snapshot s)
+    {
+        if (s.TotalDamage > 0) return true;
+
+        foreach (var r in s.Rows)
+            if (r.Healed > 0 || r.DamageTaken > 0) return true;
+
+        return false;
+    }
 
     internal void MuteCurrent()
     {

@@ -48,6 +48,10 @@ internal sealed class History
             if (!resuming)
             {
                 File.WriteAllText(this.file, string.Empty);
+
+                var recordings = Path.Combine(dir, "recordings");
+                if (Directory.Exists(recordings)) Directory.Delete(recordings, recursive: true);
+
                 Plugin.Log.Information("New session, history cleared.");
                 return;
             }
@@ -125,6 +129,8 @@ internal sealed class History
         }
     }
 
+    internal Func<Snapshot, string, string?>? Record;
+
     internal volatile bool Pvp;
 
     internal volatile string PvpTitle = "PvP";
@@ -151,7 +157,13 @@ internal sealed class History
             else gained |= tally.Take(row);
         }
 
-        if (gained) this.pvpStarted ??= next.CapturedAt.AddSeconds(-Math.Max(0, next.DurationSeconds));
+        if (gained && this.pvpStarted is null)
+        {
+            this.pvpStarted = next.CapturedAt.AddSeconds(-Math.Max(0, next.DurationSeconds));
+
+            this.pvpLogFile = next.LogFile;
+            this.pvpLogOffset = next.LogOffset;
+        }
 
         this.live = this.pvpStarted is null ? null : this.StickySnapshot(next);
     }
@@ -159,6 +171,8 @@ internal sealed class History
     private readonly Dictionary<string, Tally> pvpTally = new(StringComparer.Ordinal);
     private int pvpLastSeconds;
     private DateTime? pvpStarted;
+    private string pvpLogFile = string.Empty;
+    private long pvpLogOffset;
 
     private bool pvpPrimed = true;
 
@@ -246,14 +260,15 @@ internal sealed class History
         return new Snapshot
         {
             Title = this.PvpTitle,
+            Pvp = true,
             TeamMode = mode,
             Zone = next.Zone,
             Duration = $"{(int)span.TotalMinutes:00}:{span.Seconds:00}",
             DurationSeconds = seconds,
             CapturedAt = next.CapturedAt,
             StartedAt = this.pvpStarted ?? next.StartedAt,
-            LogFile = next.LogFile,
-            LogOffset = next.LogOffset,
+            LogFile = this.pvpLogFile,
+            LogOffset = this.pvpLogOffset,
             TotalDamage = damage,
             RaidDps = damage / seconds,
             RaidHps = healed / seconds,
@@ -275,6 +290,9 @@ internal sealed class History
 
         this.segments.Add(done);
         if (this.segments.Count > Keep) this.segments.RemoveAt(0);
+
+        if (this.Record is { } record && this.file is not null)
+            done.RecordingFile = record(done, Path.Combine(Path.GetDirectoryName(this.file)!, "recordings")) ?? done.RecordingFile;
 
         Probe.Line($"archived \"{done.Title}\" {done.Duration} ({done.DurationSeconds}s) "
                  + $"damage={done.TotalDamage:N0} rows={done.Rows.Count} zone={done.Zone}");
@@ -317,6 +335,8 @@ internal sealed class History
             this.pvpTally.Clear();
             this.pvpLastSeconds = 0;
             this.pvpStarted = null;
+            this.pvpLogFile = string.Empty;
+            this.pvpLogOffset = 0;
             this.pvpPrimed = false;
         }
     }
