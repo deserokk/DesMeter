@@ -37,8 +37,6 @@ internal sealed class MeterWindow : Window
 
     private int panelScroll;
 
-    private bool viewChosen;
-
     private readonly List<Rendered> view = new();
 
     private Snapshot? viewOf;
@@ -213,13 +211,13 @@ internal sealed class MeterWindow : Window
             return;
         }
 
-        var wholeMatch = this.Settings.PvpWholeMatch && !this.viewChosen && Plugin.PvpMatch;
+        var wholeMatch = this.Settings.PvpWholeMatch && Plugin.PvpMatch;
 
         if (this.link.Stalled) this.DrawStalled();
 
-        this.DrawMeter(this.overall || wholeMatch
+        this.DrawMeter(this.overall
             ? this.link.History.Overall()
-            : this.pinned ?? this.link.Current);
+            : this.pinned ?? (wholeMatch ? this.link.History.Match : this.link.Current));
     }
 
     private void DrawStalled()
@@ -279,11 +277,8 @@ internal sealed class MeterWindow : Window
         this.overall = false;
         this.pinned = null;
         this.scroll = 0;
-        this.viewChosen = false;
         this.lengths.Clear();
     }
-
-    internal void TerritoryChanged() => this.viewChosen = false;
 
     private void DrawTopGrip()
     {
@@ -649,7 +644,6 @@ internal sealed class MeterWindow : Window
         this.overall = overall;
         this.pinned = segment;
         this.scroll = 0;
-        this.viewChosen = true;
         this.lengths.Clear();
         this.panel = Panel.None;
     }

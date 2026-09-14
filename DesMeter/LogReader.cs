@@ -103,7 +103,21 @@ internal static class LogReader
     {
         var result = new FightAbilities();
 
-        if (string.IsNullOrEmpty(fight.LogFile) || !File.Exists(fight.LogFile))
+        var logFile = fight.LogFile;
+        if (!string.IsNullOrEmpty(logFile) && !File.Exists(logFile))
+        {
+            var archive = Path.Combine(Path.GetDirectoryName(logFile) ?? string.Empty, "fflogsarchive");
+            if (Directory.Exists(archive))
+            {
+                foreach (var candidate in Directory.EnumerateFiles(archive, "*-" + Path.GetFileName(logFile)))
+                {
+                    logFile = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(logFile) || !File.Exists(logFile))
         {
             result.Problem = "The network log for this fight isn't there any more.";
             return result;
@@ -262,7 +276,7 @@ internal static class LogReader
 
         var nextRecorded = 0;
 
-        using var stream = new FileStream(fight.LogFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var stream = new FileStream(logFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
         if (fight.LogOffset > 0 && fight.LogOffset < stream.Length) stream.Seek(Math.Max(0, fight.LogOffset - 65536), SeekOrigin.Begin);
 
