@@ -115,19 +115,82 @@ internal sealed class History
         this.Beat();
     }
 
-    internal void Observe(Snapshot next)
+    internal Snapshot Observe(Snapshot next)
     {
         lock (this.gate)
         {
             if (this.Pvp)
             {
                 this.ObservePvp(next);
-                return;
+
+                this.lastRaw = null;
+                this.seen.Clear();
+                return next;
             }
 
-            if (this.live is { } previous && Ended(previous, next)) this.Archive(previous);
-            this.live = next;
+            if (this.lastRaw is { } previous && Ended(previous, next))
+            {
+                if (this.live is { } done) this.Archive(done);
+                this.seen.Clear();
+            }
+
+            this.lastRaw = next;
+            this.live = this.Gathered(next);
+            return this.live;
         }
+    }
+
+    private Snapshot? lastRaw;
+
+    private readonly Dictionary<string, MeterRow> seen = new(StringComparer.Ordinal);
+
+    private Snapshot Gathered(Snapshot next)
+    {
+        var active = 0;
+
+        foreach (var row in next.Rows)
+        {
+            if (row.Damage <= 0 && row.Healed <= 0 && row.DamageTaken <= 0) continue;
+
+            this.seen[row.Name] = row;
+            active++;
+        }
+
+        if (this.seen.Count <= active) return next;
+
+        var seconds = Math.Max(1, next.DurationSeconds);
+        var shown = next.Rows.Where(r => !this.seen.ContainsKey(r.Name)).Concat(this.seen.Values).ToList();
+        var damage = shown.Sum(r => r.Damage);
+        var healed = shown.Sum(r => r.Healed);
+
+        var rows = shown.Select(r => r with
+        {
+            Dps = r.Damage / seconds,
+            Hps = r.Healed / seconds,
+            DamagePct = damage > 0 ? r.Damage / damage * 100 : 0,
+            HealedPct = healed > 0 ? r.Healed / healed * 100 : 0,
+        }).ToList();
+
+        return new Snapshot
+        {
+            Title = next.Title,
+            Zone = next.Zone,
+            TeamMode = next.TeamMode,
+            Pvp = next.Pvp,
+            Duration = next.Duration,
+            DurationSeconds = next.DurationSeconds,
+            CapturedAt = next.CapturedAt,
+            StartedAt = next.StartedAt,
+            LogFile = next.LogFile,
+            LogOffset = next.LogOffset,
+            RecordingFile = next.RecordingFile,
+            TotalDamage = damage,
+            RaidDps = damage / seconds,
+            RaidHps = healed / seconds,
+            MaxDamage = rows.Count > 0 ? rows.Max(r => r.Damage) : 0,
+            MaxHealed = rows.Count > 0 ? rows.Max(r => r.Healed) : 0,
+            Rows = rows,
+        };
     }
 
     internal Func<Snapshot, string, string?>? Record;
@@ -281,8 +344,24 @@ internal sealed class History
         };
     }
 
-    private static bool Ended(Snapshot previous, Snapshot next)
-        => next.TotalDamage < previous.TotalDamage;
+    internal static bool Ended(Snapshot previous, Snapshot next)
+    {
+        if (next.TotalDamage >= previous.TotalDamage) return false;
+
+        var shared = 0;
+        var fell = 0;
+
+        foreach (var row in next.Rows)
+        {
+            var was = previous.Rows.Find(r => r.Name == row.Name);
+            if (was is not { Damage: > 0 }) continue;
+
+            shared++;
+            if (row.Damage < was.Damage) fell++;
+        }
+
+        return shared == 0 || fell * 2 > shared;
+    }
 
     private void Archive(Snapshot done)
     {

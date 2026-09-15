@@ -84,13 +84,13 @@ internal sealed class IinactLink : IDisposable
 
     internal volatile string FirstTarget = string.Empty;
 
-    private double lastTotal;
+    private Snapshot? lastRaw;
 
     private DateTime? encounterStart;
     private string anchorFile = string.Empty;
     private long anchorOffset;
 
-    private double mutedAbove = -1;
+    private bool muted;
 
     private bool dumpedProbe;
     private DateTime nextAttempt = DateTime.MinValue;
@@ -162,17 +162,19 @@ internal sealed class IinactLink : IDisposable
 
             this.DumpProbeOnce(data);
 
-            var incoming = Num((JObject?)data["Encounter"] ?? new JObject(), "damage");
+            var snapshot = Build(data, this.LocalName, this.FirstTarget);
 
-            if (incoming < this.lastTotal)
+            var fresh = this.lastRaw is { } before && History.Ended(before, snapshot);
+            this.lastRaw = snapshot;
+
+            if (fresh)
             {
                 this.FirstTarget = string.Empty;
                 this.encounterStart = null;
+                snapshot.Title = Name((data["Encounter"] as JObject)?["title"]?.ToString(), string.Empty);
             }
 
-            this.lastTotal = incoming;
-
-            if (this.encounterStart is null && incoming > 0)
+            if (this.encounterStart is null && snapshot.TotalDamage > 0)
             {
                 this.encounterStart = DateTime.Now;
                 (this.anchorFile, this.anchorOffset) = LogAnchor.Current();
@@ -189,23 +191,20 @@ internal sealed class IinactLink : IDisposable
 
             this.lastPayload = arrived;
 
-            var snapshot = Build(data, this.LocalName, this.FirstTarget);
-
             snapshot.StartedAt = this.encounterStart ?? snapshot.CapturedAt;
             snapshot.LogFile = this.anchorFile;
             snapshot.LogOffset = this.anchorOffset;
 
-            if (this.mutedAbove >= 0)
+            if (this.muted)
             {
+                if (!fresh) return true;
 
-                if (snapshot.TotalDamage >= this.mutedAbove) return true;
-
-                this.mutedAbove = -1;
+                this.muted = false;
             }
 
-            this.History.Observe(snapshot);
+            var shown = this.History.Observe(snapshot);
 
-            if (HasAnything(snapshot) || this.Current is null) this.Current = snapshot;
+            if (HasAnything(shown) || this.Current is null) this.Current = shown;
         }
         catch (Exception ex)
         {
@@ -264,9 +263,8 @@ internal sealed class IinactLink : IDisposable
 
     internal void MuteCurrent()
     {
-        var running = this.Current?.TotalDamage ?? 0;
 
-        this.mutedAbove = running > 0 ? running : -1;
+        this.muted = this.Current is { TotalDamage: > 0 };
         this.Current = null;
     }
 
