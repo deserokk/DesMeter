@@ -86,6 +86,8 @@ internal sealed class IinactLink : IDisposable
 
     private Snapshot? lastRaw;
 
+    private bool checkedResume;
+
     private DateTime? encounterStart;
     private string anchorFile = string.Empty;
     private long anchorOffset;
@@ -172,6 +174,17 @@ internal sealed class IinactLink : IDisposable
                 this.FirstTarget = string.Empty;
                 this.encounterStart = null;
                 snapshot.Title = Name((data["Encounter"] as JObject)?["title"]?.ToString(), string.Empty);
+            }
+
+            if (!this.checkedResume)
+            {
+                this.checkedResume = true;
+
+                if (this.History.Continued(snapshot) is { } filed)
+                {
+                    this.encounterStart = filed.StartedAt;
+                    (this.anchorFile, this.anchorOffset) = (filed.LogFile, filed.LogOffset);
+                }
             }
 
             if (this.encounterStart is null && snapshot.TotalDamage > 0)

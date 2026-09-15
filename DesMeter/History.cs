@@ -140,6 +140,34 @@ internal sealed class History
         }
     }
 
+    internal Snapshot? Continued(Snapshot next)
+    {
+        lock (this.gate)
+        {
+            if (this.Pvp || this.segments.Count == 0) return null;
+
+            var filed = this.segments[^1];
+
+            var gained = next.DurationSeconds - filed.DurationSeconds;
+            if (gained < 0 || gained > (next.CapturedAt - filed.CapturedAt).TotalSeconds + 5) return null;
+
+            var shared = 0;
+
+            foreach (var row in next.Rows)
+            {
+                var was = filed.Rows.Find(r => r.Name == row.Name);
+                if (was is null) continue;
+                if (row.Damage + 0.5 < was.Damage) return null;
+                shared++;
+            }
+
+            if (shared == 0 || shared * 2 < next.Rows.Count) return null;
+
+            foreach (var row in filed.Rows) this.seen[row.Name] = row;
+            return filed;
+        }
+    }
+
     private Snapshot? lastRaw;
 
     private readonly Dictionary<string, MeterRow> seen = new(StringComparer.Ordinal);
