@@ -2,7 +2,7 @@
   "Author": "deserokk",
   "Name": "DesMeter",
   "InternalName": "DesMeter",
-  "Description": "A combat meter that runs inside the game. Reads the parse from IINACT over plugin IPC and draws it here, so there is no ACT process, no browser and no overlay host to keep alive.",
+  "Description": "A combat meter that runs inside the game. Reads the parse from IINACT over plugin IPC and draws it here.",
   "ApplicableVersion": "any",
   "Tags": [
     "meter",
