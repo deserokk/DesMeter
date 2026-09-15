@@ -736,7 +736,10 @@ internal sealed class BreakdownWindow : Window, IDisposable
         var at = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
         var x = at.X + (indent ? 18f * s : 0f);
-        var shown = label.Split("##")[0] + (estimated ? "*" : string.Empty);
+        var shown = label.Split("##")[0];
+
+        if (shown.Equals("attack", StringComparison.OrdinalIgnoreCase)) shown = "Auto Attack";
+        shown += estimated ? "*" : string.Empty;
 
         var used = Abilities.Icon(dl, new Vector2(x, at.Y), line, icon);
         Chrome.TextAt(new Vector2(x + used + (used > 0 ? 6f * s : 0f), at.Y), Chrome.Fit(shown, width - used - (24f * s)),
